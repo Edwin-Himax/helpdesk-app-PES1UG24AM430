@@ -2,7 +2,7 @@
 
 > **Stack**: Next.js 14, Node.js, PostgreSQL, Redis  
 > **Repository Name**: Campus help desk  
-> **Candidate SRN**: @CAMPUS_SRN_001  
+> **Candidate SRN**: PES1UG24AM430 
 
 A real-time Campus Help Desk web application where students post short help questions and view the latest inquiries. **PostgreSQL** serves as the permanent source of truth, while **Redis** provides 60-second response caching and atomic visit counting. Next.js handles both the responsive frontend UI and backend Route Handler APIs.
 
@@ -156,7 +156,7 @@ Copy `.env.example` to `.env.local` (pre-created with sensible defaults):
 ```bash
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/campus_helpdesk
 REDIS_URL=redis://localhost:6379
-SRN=CAMPUS_SRN_001
+SRN=PES1UG24AM430
 ```
 
 ### Step 4: Initialize PostgreSQL Database

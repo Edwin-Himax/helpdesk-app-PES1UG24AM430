@@ -159,7 +159,7 @@ export default function CampusHelpDeskBoard() {
             <span className="count">{views !== null ? views : '...'}</span>
           </div>
           <div className="srn-pill">
-            <span>SRN: @CAMPUS_SRN_001</span>
+            <span>SRN: @PES1UG24AM430</span>
           </div>
         </div>
       </header>
