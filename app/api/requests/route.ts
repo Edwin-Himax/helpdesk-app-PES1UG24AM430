@@ -1,6 +1,81 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { insertHelpRequest } from '@/lib/db';
-import { invalidateLatestRequestsCache } from '@/lib/redis';
+import {
+  insertHelpRequest,
+  getLatestHelpRequests,
+  HelpRequest,
+} from '@/lib/db';
+import {
+  getCachedLatestRequests,
+  setCachedLatestRequests,
+  invalidateLatestRequestsCache,
+} from '@/lib/redis';
+
+// Force dynamic execution for Next.js API route handlers to avoid static build caching
+export const dynamic = 'force-dynamic';
+
+/**
+ * GET /api/requests
+ * Returns the latest 10 requests, newest first.
+ *
+ * Algorithm:
+ * 1. Check Redis for the key help:latest.
+ * 2. If present, return cached list with source: "Redis".
+ * 3. If absent, query PostgreSQL, cache in Redis with 60-second TTL, and return with source: "PostgreSQL".
+ *
+ * Cache Miss Response:
+ * {
+ *   "source": "PostgreSQL",
+ *   "requests": [ ... ]
+ * }
+ *
+ * Cache Hit Response:
+ * {
+ *   "source": "Redis",
+ *   "requests": [ ... ]
+ * }
+ */
+export async function GET() {
+  try {
+    // 1. Check Redis for help:latest
+    const cached = await getCachedLatestRequests<HelpRequest[]>();
+
+    if (cached !== null && Array.isArray(cached)) {
+      // 2. Cache Hit -> return source: "Redis"
+      return NextResponse.json({
+        source: 'Redis',
+        requests: cached,
+      });
+    }
+
+    // 3. Cache Miss -> Query PostgreSQL
+    const requests = await getLatestHelpRequests(10);
+
+    // Store in Redis with 60-second TTL
+    await setCachedLatestRequests(requests);
+
+    // Return source: "PostgreSQL"
+    return NextResponse.json({
+      source: 'PostgreSQL',
+      requests,
+    });
+  } catch (error) {
+    console.error('Error in GET /api/requests:', error);
+
+    // Rule: If Redis or unexpected error occurs, fall back to PostgreSQL rather than crash
+    try {
+      const fallbackRequests = await getLatestHelpRequests(10);
+      return NextResponse.json({
+        source: 'PostgreSQL',
+        requests: fallbackRequests,
+      });
+    } catch (fallbackError) {
+      return NextResponse.json(
+        { source: 'PostgreSQL', requests: [], error: 'Database error' },
+        { status: 500 }
+      );
+    }
+  }
+}
 
 /**
  * POST /api/requests
@@ -38,7 +113,7 @@ export async function POST(req: NextRequest) {
     const student_name = typeof body.student_name === 'string' ? body.student_name.trim() : '';
     const message = typeof body.message === 'string' ? body.message.trim() : '';
 
-    // Validate non-empty fields
+    // Validation: Reject empty name or empty message
     if (!student_name || !message) {
       return NextResponse.json(
         { success: false, error: 'student_name and message are required' },
@@ -46,7 +121,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Additional length validation based on database schema
+    // Constraint validation: student_name VARCHAR(50), message VARCHAR(200)
     if (student_name.length > 50) {
       return NextResponse.json(
         { success: false, error: 'student_name cannot exceed 50 characters' },
@@ -61,7 +136,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Insert into PostgreSQL with parameterized query
+    // Insert into PostgreSQL using parameterized query
     const { id } = await insertHelpRequest(student_name, message);
 
     // Invalidate Redis cache key "help:latest"
